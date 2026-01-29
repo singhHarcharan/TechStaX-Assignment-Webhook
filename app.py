@@ -33,7 +33,16 @@ WEBHOOK_SECRET = os.environ.get('WEBHOOK_SECRET', '')
 
 # Initialize MongoDB client
 try:
-    client = MongoClient(MONGO_URI)
+    client = MongoClient(
+        MONGO_URI,
+        tls=True,
+        tlsAllowInvalidCertificates=True,
+        connectTimeoutMS=30000,
+        socketTimeoutMS=None,
+        socketKeepAlive=True,
+        connect=False,
+        maxPoolsize=1
+    )
     db = client[DATABASE_NAME]
     collection = db[COLLECTION_NAME]
     logger.info("Successfully connected to MongoDB")
@@ -119,6 +128,9 @@ def webhook():
     GitHub webhook endpoint
     Receives and processes GitHub events
     """
+    print("Received headers:", dict(request.headers))
+    print("Signature received:", signature)
+    print("Expected signature:", generate_signature(request.data))
     try:
         # Verify GitHub signature
         signature = request.headers.get('X-Hub-Signature-256') or \
@@ -221,5 +233,5 @@ def health():
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 5001))
     app.run(host='0.0.0.0', port=port, debug=True)

@@ -9,7 +9,7 @@ import json
 from datetime import datetime
 
 # Configuration
-BASE_URL = "http://localhost:5000"  # Change this to your deployed URL
+BASE_URL = "http://localhost:5001"  # Change this to your deployed URL
 
 def test_health():
     """Test health endpoint"""
