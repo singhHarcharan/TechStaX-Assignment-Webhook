@@ -52,20 +52,32 @@ except Exception as e:
 
 
 def verify_signature(payload_body, signature_header):
-    """
-    Verify that the payload was sent from GitHub by validating the signature.
-    """
-    if not WEBHOOK_SECRET:
-        return True  # Skip verification if no secret is set
-    
+    """Verify that the payload was sent from GitHub by validating the signature"""
     if not signature_header:
+        logger.warning("No signature header")
         return False
     
-    hash_algorithm, github_signature = signature_header.split('=')
-    algorithm = hashlib.__dict__.get(hash_algorithm)
-    encoded_key = bytes(WEBHOOK_SECRET, 'latin-1')
-    mac = hmac.new(encoded_key, msg=payload_body, digestmod=algorithm)
-    return hmac.compare_digest(mac.hexdigest(), github_signature)
+    try:
+        # Get the hash algorithm and signature from the header
+        hash_name, signature = signature_header.split('=')
+        if hash_name not in ['sha1', 'sha256']:
+            logger.warning(f"Unsupported hash algorithm: {hash_name}")
+            return False
+
+        # Create a new hash of the payload using the secret
+        key = WEBHOOK_SECRET.encode()
+        hmac_obj = hmac.new(key, msg=payload_body, digestmod=hash_name)
+        expected_signature = hmac_obj.hexdigest()
+
+        # Compare the signatures
+        result = hmac.compare_digest(signature, expected_signature)
+        if not result:
+            logger.warning(f"Signature mismatch. Expected: {expected_signature}, Got: {signature}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error verifying signature: {e}")
+        return False
 
 
 def parse_push_event(payload):
