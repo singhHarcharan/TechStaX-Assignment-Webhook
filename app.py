@@ -128,13 +128,16 @@ def webhook():
     GitHub webhook endpoint
     Receives and processes GitHub events
     """
+    # Get the signature from headers first
+    signature = request.headers.get('X-Hub-Signature-256') or \
+               request.headers.get('X-Hub-Signature')
+    
+    # Log the headers and signature for debugging
     print("Received headers:", dict(request.headers))
     print("Signature received:", signature)
-    print("Expected signature:", generate_signature(request.data))
+    
     try:
         # Verify GitHub signature
-        signature = request.headers.get('X-Hub-Signature-256') or \
-                   request.headers.get('X-Hub-Signature')
         if not verify_signature(request.data, signature):
             logger.warning("Invalid webhook signature")
             return jsonify({'error': 'Invalid signature'}), 401
