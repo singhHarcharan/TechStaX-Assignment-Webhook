@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Webhook Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .status-bar {
+            background: white;
+            padding: 15px 30px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .pulse {
+            width: 12px;
+            height: 12px;
+            background: #10b981;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .last-update {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .events-container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            min-height: 400px;
+        }
+
+        .events-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .events-title {
+            font-size: 1.5em;
+            color: #333;
+        }
+
+        .event-count {
+            background: #667eea;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+
+        .events-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .event-item {
+            background: #f9fafb;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            border-radius: 5px;
+            transition: all 0.3s ease;
+            animation: slideIn 0.5s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .event-item:hover {
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .event-item.push {
+            border-left-color: #10b981;
+        }
+
+        .event-item.pull-request {
+            border-left-color: #3b82f6;
+        }
+
+        .event-item.merge {
+            border-left-color: #8b5cf6;
+        }
+
+        .event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .event-action {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 5px;
+            font-weight: 600;
+            font-size: 0.85em;
+            text-transform: uppercase;
+        }
+
+        .event-action.push {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .event-action.pull-request {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .event-action.merge {
+            background: #ede9fe;
+            color: #5b21b6;
+        }
+
+        .event-time {
+            color: #6b7280;
+            font-size: 0.9em;
+        }
+
+        .event-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .event-detail {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .detail-label {
+            font-size: 0.85em;
+            color: #6b7280;
+            margin-bottom: 3px;
+        }
+
+        .detail-value {
+            font-weight: 500;
+            color: #1f2937;
+        }
+
+        .branch-flow {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .branch {
+            background: white;
+            padding: 4px 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            border: 1px solid #e5e7eb;
+        }
+
+        .arrow {
+            color: #6b7280;
+            font-weight: bold;
+        }
+
+        .no-events {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6b7280;
+        }
+
+        .no-events-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+
+        .spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.8em;
+            }
+
+            .status-bar {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .event-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .event-details {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 GitHub Webhook Monitor</h1>
+            <p class="subtitle">Real-time tracking of GitHub repository events</p>
+        </header>
+
+        <div class="status-bar">
+            <div class="status-indicator">
+                <div class="pulse"></div>
+                <span>Live Monitoring (Updates every 15s)</span>
+            </div>
+            <div class="last-update">
+                Last updated: <span id="lastUpdate">Never</span>
+            </div>
+        </div>
+
+        <div class="events-container">
+            <div class="events-header">
+                <h2 class="events-title">Recent Events</h2>
+                <span class="event-count" id="eventCount">0 events</span>
+            </div>
+            
+            <div id="eventsContainer">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading events...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let displayedEvents = new Set();
+        let isFirstLoad = true;
+
+        // Format timestamp to readable format
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp);
+            const options = {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                timeZone: 'UTC'
+            };
+            return date.toLocaleString('en-US', options) + ' UTC';
+        }
+
+        // Create event HTML element
+        function createEventElement(event) {
+            const actionClass = event.action.toLowerCase().replace('_', '-');
+            
+            return `
+                <div class="event-item ${actionClass}" data-id="${event.request_id}-${event.timestamp}">
+                    <div class="event-header">
+                        <span class="event-action ${actionClass}">${event.action}</span>
+                        <span class="event-time">${formatTimestamp(event.timestamp)}</span>
+                    </div>
+                    <div class="event-details">
+                        <div class="event-detail">
+                            <span class="detail-label">Author</span>
+                            <span class="detail-value">${event.author}</span>
+                        </div>
+                        <div class="event-detail">
+                            <span class="detail-label">Request ID</span>
+                            <span class="detail-value">${event.request_id}</span>
+                        </div>
+                        <div class="event-detail">
+                            <span class="detail-label">Branch Flow</span>
+                            <div class="branch-flow">
+                                <span class="branch">${event.from_branch}</span>
+                                <span class="arrow">→</span>
+                                <span class="branch">${event.to_branch}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Fetch and display events
+        async function fetchEvents() {
+            try {
+                const response = await fetch('/api/events');
+                const events = await response.json();
+
+                const container = document.getElementById('eventsContainer');
+                const eventCount = document.getElementById('eventCount');
+                const lastUpdate = document.getElementById('lastUpdate');
+
+                if (events.length === 0) {
+                    container.innerHTML = `
+                        <div class="no-events">
+                            <div class="no-events-icon">📭</div>
+                            <h3>No events yet</h3>
+                            <p>Waiting for webhook events from your GitHub repository...</p>
+                        </div>
+                    `;
+                    eventCount.textContent = '0 events';
+                } else {
+                    // Filter out events that are already displayed (avoid duplicates on refresh)
+                    const newEvents = events.filter(event => {
+                        const eventId = `${event.request_id}-${event.timestamp}`;
+                        return !displayedEvents.has(eventId);
+                    });
+
+                    // On first load, show all events
+                    if (isFirstLoad) {
+                        container.innerHTML = events.map(createEventElement).join('');
+                        events.forEach(event => {
+                            displayedEvents.add(`${event.request_id}-${event.timestamp}`);
+                        });
+                        isFirstLoad = false;
+                    } else if (newEvents.length > 0) {
+                        // Only add new events to the top
+                        const newEventsHTML = newEvents.map(createEventElement).join('');
+                        container.insertAdjacentHTML('afterbegin', newEventsHTML);
+                        newEvents.forEach(event => {
+                            displayedEvents.add(`${event.request_id}-${event.timestamp}`);
+                        });
+                    }
+
+                    eventCount.textContent = `${events.length} event${events.length !== 1 ? 's' : ''}`;
+                }
+
+                lastUpdate.textContent = new Date().toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+
+            } catch (error) {
+                console.error('Error fetching events:', error);
+                document.getElementById('eventsContainer').innerHTML = `
+                    <div class="no-events">
+                        <div class="no-events-icon">⚠️</div>
+                        <h3>Error loading events</h3>
+                        <p>Please check the console for details</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Initial fetch
+        fetchEvents();
+
+        // Poll for new events every 15 seconds
+        setInterval(fetchEvents, 15000);
+    </script>
+</body>
+</html>
