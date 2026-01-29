@@ -33,15 +33,15 @@ WEBHOOK_SECRET = os.environ.get('WEBHOOK_SECRET', '')
 
 # Initialize MongoDB client
 try:
+    # In app.py, update the MongoDB connection part
     client = MongoClient(
         MONGO_URI,
         tls=True,
         tlsAllowInvalidCertificates=True,
         connectTimeoutMS=30000,
         socketTimeoutMS=None,
-        socketKeepAlive=True,
-        connect=False,
-        maxPoolsize=1
+        retryWrites=True,
+        w='majority'
     )
     db = client[DATABASE_NAME]
     collection = db[COLLECTION_NAME]
