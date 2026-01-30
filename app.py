@@ -135,25 +135,25 @@ def index():
     return render_template('index.html')
 
 
+
 @app.route('/webhook', methods=['POST'])
 def webhook():
     """
-    GitHub webhook endpoint
-    Receives and processes GitHub events
+    GitHub webhook endpoint that handles PUSH, PULL_REQUEST, and MERGE events.
+    Validates the webhook signature, processes the event, and stores it in MongoDB.
     """
-    # Get the raw request data first
+    # Get the raw request data for signature verification
     request_data = request.get_data()
     
     # Get the signature from headers
     signature = request.headers.get('X-Hub-Signature-256') or \
                request.headers.get('X-Hub-Signature')
     
-    # Log the headers and signature for debugging
-    logger.debug("Received headers: %s", dict(request.headers))
-    logger.debug("Signature received: %s", signature)
+    # Log request information for debugging
+    logger.info(f"Received webhook request with headers: {dict(request.headers)}")
     
     try:
-        # Verify GitHub signature with raw request data
+        # Verify GitHub signature
         if not verify_signature(request_data, signature):
             logger.warning("Invalid webhook signature")
             return jsonify({'error': 'Invalid signature'}), 401
@@ -163,7 +163,6 @@ def webhook():
         if 'application/json' in content_type:
             payload = request.get_json()
         elif 'application/x-www-form-urlencoded' in content_type:
-            # For form-encoded data, the payload is in the 'payload' field
             form_data = request.form
             if 'payload' not in form_data:
                 logger.warning("No payload in form data")
@@ -183,37 +182,74 @@ def webhook():
             
         # Get event type
         event_type = request.headers.get('X-GitHub-Event')
-        logger.info(f"Received {event_type} event")
+        logger.info(f"Processing {event_type} event")
         
         # Process different event types
+        event_data = None
         if event_type == 'push':
+            logger.debug("Processing push event")
             event_data = parse_push_event(payload)
+            
         elif event_type == 'pull_request':
-            if payload.get('action') == 'closed' and payload.get('pull_request', {}).get('merged'):
+            pr_action = payload.get('action')
+            logger.debug(f"Processing pull_request event with action: {pr_action}")
+            
+            # Check if this is a merge event
+            if pr_action == 'closed' and payload.get('pull_request', {}).get('merged'):
+                logger.info("Detected MERGE event from pull request")
                 event_data = parse_merge_event(payload)
+                # Set event type to 'merge' for better identification
+                event_type = 'merge'
             else:
+                # Regular pull request event (opened, synchronize, reopened, etc.)
+                logger.info(f"Processing pull request action: {pr_action}")
                 event_data = parse_pull_request_event(payload)
+                
         else:
             logger.warning(f"Unhandled event type: {event_type}")
             return jsonify({'status': 'ignored', 'message': 'Event type not processed'}), 200
 
         # Store the event in MongoDB
         if event_data:
-            event = {
-                'type': event_type,
+            event_doc = {
+                'type': event_type,  # 'push', 'pull_request', or 'merge'
                 'data': event_data,
                 'timestamp': datetime.utcnow(),
                 'repository': payload.get('repository', {}).get('full_name', 'unknown'),
-                'sender': payload.get('sender', {}).get('login', 'unknown')
+                'sender': payload.get('sender', {}).get('login', 'unknown'),
+                'action': event_data.get('action', '').lower(),  # 'push', 'pull_request', or 'merge'
+                'metadata': {
+                    'github_delivery': request.headers.get('X-GitHub-Delivery'),
+                    'github_event': event_type,
+                    'received_at': datetime.utcnow().isoformat()
+                }
             }
-            events_collection.insert_one(event)
-            logger.info(f"Stored {event_type} event in database")
+            
+            # Insert into MongoDB
+            try:
+                result = events_collection.insert_one(event_doc)
+                logger.info(f"Successfully stored {event_type} event with ID: {result.inserted_id}")
+                
+                # Log a sample of the stored data for debugging
+                stored_doc = events_collection.find_one({'_id': result.inserted_id}, {'_id': 0})
+                logger.debug(f"Stored document: {stored_doc}")
+                
+            except Exception as db_error:
+                logger.error(f"Error storing event in MongoDB: {str(db_error)}", exc_info=True)
+                return jsonify({'error': 'Failed to store event'}), 500
         
-        return jsonify({'status': 'success'}), 200
+        return jsonify({
+            'status': 'success',
+            'event_type': event_type,
+            'event_id': str(event_data.get('request_id', '')) if event_data else None
+        }), 200
 
     except Exception as e:
         logger.error(f"Error processing webhook: {str(e)}", exc_info=True)
-        return jsonify({'error': 'Internal server error'}), 500
+        return jsonify({
+            'error': 'Internal server error',
+            'message': str(e)
+        }), 500
 
 @app.route('/api/events', methods=['GET'])
 def get_events():
