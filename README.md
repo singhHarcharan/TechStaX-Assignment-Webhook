@@ -1,297 +1,165 @@
-# GitHub Webhook Receiver
+# How to Test the GitHub Webhook Integration
 
-A Flask-based application that receives GitHub webhook events (PUSH, PULL_REQUEST, MERGE), stores them in MongoDB, and displays them in a real-time UI.
+This guide provides step-by-step instructions to test all features of the GitHub Webhook integration, including push events, pull requests, and merge events.
 
-## Features
+## Table of Contents
 
-- ✅ Receives GitHub webhooks for PUSH, PULL_REQUEST, and MERGE events
-- ✅ Stores event data in MongoDB with proper schema
-- ✅ Real-time UI that polls MongoDB every 15 seconds
-- ✅ Clean, minimal, and responsive design
-- ✅ Proper error handling and logging
-- ✅ Webhook signature verification for security
-- ✅ Prevents duplicate event display on refresh
+- [Prerequisites](#prerequisites)
+- [Test Script](#test-script)
+- [Running the Tests](#running-the-tests)
+- [Verifying the Results](#verifying-the-results)
+- [Troubleshooting](#troubleshooting)
+- [Cleaning Up](#cleaning-up)
+- [Viewing Events](#viewing-events)
 
-## Tech Stack
+## Prerequisites
 
-- **Backend**: Flask (Python)
-- **Database**: MongoDB
-- **Frontend**: HTML, CSS, Vanilla JavaScript
-- **Deployment Ready**: Gunicorn for production
+1. **Clone the Action Repository**:
+   ```bash
+   git clone https://github.com/singhHarcharan/TechStaX-Assignment-ActionRepo.git
+   cd TechStaX-Assignment-ActionRepo
+   ```
 
-## Project Structure
+2. **Ensure you have**:
+   - Git installed on your system
+   - Proper GitHub authentication set up
+   - Access to the webhook receiver interface
 
-```
-webhook-repo/
-├── app.py                 # Main Flask application
-├── templates/
-│   └── index.html        # UI template
-├── requirements.txt      # Python dependencies
-├── .env.example         # Environment variables template
-├── .gitignore           # Git ignore rules
-└── README.md            # This file
-```
+## Test Script
 
-## MongoDB Schema
+Create a new file named `test_webhooks.sh` with the following content:
 
-```javascript
-{
-  "_id": ObjectId,           // MongoDB default ID
-  "request_id": String,      // Commit hash (PUSH) or PR number (PULL_REQUEST/MERGE)
-  "author": String,          // GitHub username
-  "action": String,          // "PUSH", "PULL_REQUEST", or "MERGE"
-  "from_branch": String,     // Source branch
-  "to_branch": String,       // Target branch
-  "timestamp": String        // ISO 8601 datetime string (UTC)
+```bash
+#!/bin/bash
+set -e  # Exit on error
+
+# Navigate to repository
+cd "$(dirname "$0")"
+
+# Function to print section headers
+section() {
+    echo -e "\n\033[1;34m=== $1 ===\033[0m"
 }
-```
 
-## Setup Instructions
-
-### Prerequisites
-
-- Python 3.8 or higher
-- MongoDB (local or cloud instance like MongoDB Atlas)
-- Git
-
-### 1. Clone the Repository
-
-```bash
-git clone <your-webhook-repo-url>
-cd webhook-repo
-```
-
-### 2. Create Virtual Environment
-
-```bash
-python -m venv venv
-
-# On Windows
-venv\Scripts\activate
-
-# On macOS/Linux
-source venv/bin/activate
-```
-
-### 3. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Configure Environment Variables
-
-Create a `.env` file from the example:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` with your configuration:
-
-```env
-MONGO_URI=mongodb://localhost:27017/
-DATABASE_NAME=github_webhooks
-COLLECTION_NAME=events
-WEBHOOK_SECRET=your_secret_here  # Optional but recommended
-PORT=5000
-```
-
-### 5. Start MongoDB
-
-Make sure MongoDB is running:
-
-```bash
-# On macOS with Homebrew
-brew services start mongodb-community
-
-# On Linux
-sudo systemctl start mongod
-
-# Or use MongoDB Atlas (cloud) and update MONGO_URI
-```
-
-### 6. Run the Application
-
-```bash
-# Development mode
-python app.py
-
-# Production mode with Gunicorn
-gunicorn -w 4 -b 0.0.0.0:5000 app:app
-```
-
-The application will be available at `http://localhost:5000`
-
-## Setting Up GitHub Webhooks
-
-### 1. Expose Your Local Server (for testing)
-
-Use a tool like ngrok to expose your local server:
-
-```bash
-ngrok http 5000
-```
-
-Copy the HTTPS URL (e.g., `https://abc123.ngrok.io`)
-
-### 2. Configure Webhook in GitHub
-
-1. Go to your `action-repo` repository on GitHub
-2. Navigate to **Settings** → **Webhooks** → **Add webhook**
-3. Configure:
-   - **Payload URL**: `https://your-ngrok-url.ngrok.io/webhook`
-   - **Content type**: `application/json`
-   - **Secret**: Your webhook secret (same as in `.env`)
-   - **Events**: Select "Let me select individual events"
-     - ✅ Pushes
-     - ✅ Pull requests
-   - **Active**: ✅ Checked
-
-4. Click **Add webhook**
-
-### 3. Test the Webhook
-
-Trigger events in your `action-repo`:
-
-```bash
-# Test PUSH event
-echo "test" > test.txt
-git add test.txt
-git commit -m "Test push event"
+# 1. Test Push Event
+section "Testing Push Event"
+git checkout main
+git pull origin main
+echo "Test push - $(date)" > push_test.txt
+git add push_test.txt
+git commit -m "Test push event - $(date)"
 git push origin main
+echo "✅ Push event triggered. Check your webhook receiver for the event."
 
-# Test PULL_REQUEST event
-git checkout -b feature-branch
-echo "feature" > feature.txt
-git add feature.txt
-git commit -m "Add feature"
-git push origin feature-branch
-# Then create a PR on GitHub
+# 2. Test Pull Request Event
+section "Testing Pull Request"
+git checkout -b test-pr 2>/dev/null || git checkout test-pr
+echo "PR test - $(date)" > pr_test.txt
+git add pr_test.txt
+git commit -m "Test PR changes - $(date)"
+git push -f -u origin test-pr
+echo "✅ PR branch pushed. Please create a PR from 'test-pr' to 'main' on GitHub."
 
-# Test MERGE event
-# Merge the PR on GitHub
-```
+# 3. Test Merge Event
+section "Testing Merge"
+git checkout -b test-merge 2>/dev/null || git checkout test-merge
+echo "Merge test - $(date)" > merge_test.txt
+git add merge_test.txt
+git commit -m "Test merge changes - $(date)"
+git push -f -u origin test-merge
+echo "✅ Merge branch pushed. Please create and merge a PR from 'test-merge' to 'main' on GitHub."
 
-## API Endpoints
+section "Testing Complete"
+echo "All test events have been triggered. Check your webhook receiver for the events."
 
-### `GET /`
-Returns the main UI page
+## Running the Tests
 
-### `POST /webhook`
-GitHub webhook endpoint
-- Headers: `X-GitHub-Event`, `X-Hub-Signature-256`
-- Body: GitHub webhook payload (JSON)
+1. **Make the script executable**:
+   ```bash
+   chmod +x test_webhooks.sh
+   ```
 
-### `GET /api/events`
-Fetch all events from MongoDB
-- Response: Array of event objects (sorted by timestamp, descending)
+2. **Run the test script**:
+   ```bash
+   ./test_webhooks.sh
+   ```
 
-### `POST /api/events/clear`
-Clear all events (useful for testing)
-- Response: `{status: 'success', deleted_count: number}`
+3. **Complete the manual steps**:
+   - Go to your GitHub repository
+   - Create a PR from `test-pr` to `main` (but don't merge it)
+   - Create another PR from `test-merge` to `main` and merge it
 
-### `GET /health`
-Health check endpoint
-- Response: `{status: 'healthy'}`
+## Verifying the Results
 
-## Event Display Formats
+### Expected Outputs:
 
-### PUSH Event
-```
-{author} pushed to {to_branch} on {timestamp}
-```
-Example: *Travis pushed to "staging" on 1st April 2021 - 9:30 PM UTC*
+1. **Push Event**:
+   - Should appear immediately after the first section runs
+   - Format: `{user} pushed to {branch} on {timestamp}`
 
-### PULL_REQUEST Event
-```
-{author} submitted a pull request from {from_branch} to {to_branch} on {timestamp}
-```
-Example: *Travis submitted a pull request from "staging" to "master" on 1st April 2021 - 9:00 AM UTC*
+2. **Pull Request Event**:
+   - Should appear when you create the PR from `test-pr` to `main`
+   - Format: `{user} submitted a pull request from {from_branch} to {to_branch} on {timestamp}`
 
-### MERGE Event (Brownie Points!)
-```
-{author} merged branch {from_branch} to {to_branch} on {timestamp}
-```
-Example: *Travis merged branch "dev" to "master" on 2nd April 2021 - 12:00 PM UTC*
-
-## Features Implemented
-
-✅ **Proper Code Structure**: Modular functions, clear separation of concerns  
-✅ **Error Handling**: Try-catch blocks, proper logging  
-✅ **Security**: Webhook signature verification  
-✅ **Documentation**: Comprehensive comments and docstrings  
-✅ **Data Validation**: Timestamp formatting, proper data parsing  
-✅ **No Duplicate Display**: Tracks displayed events to avoid showing duplicates  
-✅ **Clean UI**: Minimal, responsive design with auto-refresh  
-✅ **Production Ready**: Gunicorn configuration included  
-
-## Deployment
-
-### Deploy to Heroku
-
-```bash
-# Login to Heroku
-heroku login
-
-# Create app
-heroku create your-app-name
-
-# Add MongoDB addon
-heroku addons:create mongolab:sandbox
-
-# Set environment variables
-heroku config:set WEBHOOK_SECRET=your_secret
-
-# Deploy
-git push heroku main
-
-# Open app
-heroku open
-```
-
-### Deploy to Railway/Render
-
-1. Connect your GitHub repository
-2. Add MongoDB database
-3. Set environment variables
-4. Deploy automatically
-
-## Testing Checklist
-
-- [ ] PUSH events are captured correctly
-- [ ] PULL_REQUEST events are captured correctly
-- [ ] MERGE events are captured correctly (brownie points!)
-- [ ] UI displays all events properly
-- [ ] UI refreshes every 15 seconds
-- [ ] No duplicate events on refresh
-- [ ] Timestamps are formatted correctly in UTC
-- [ ] Branch names display correctly
-- [ ] Author names display correctly
-- [ ] UI is responsive on mobile devices
+3. **Merge Event**:
+   - Should appear when you merge the PR from `test-merge` to `main`
+   - Format: `{user} merged branch {from_branch} to {to_branch} on {timestamp}`
 
 ## Troubleshooting
 
-### MongoDB Connection Error
-- Ensure MongoDB is running
-- Check `MONGO_URI` in `.env`
-- For Atlas, whitelist your IP address
+### Common Issues:
 
-### Webhook Not Receiving Events
-- Check ngrok is running
-- Verify webhook URL in GitHub settings
-- Check GitHub webhook delivery logs
-- Verify webhook secret matches
+1. **Authentication Errors**:
+   ```bash
+   # Ensure you have proper Git credentials
+   git config --global user.name "Your Name"
+   git config --global user.email "your.email@example.com"
+   ```
 
-### UI Not Updating
-- Check browser console for errors
-- Verify `/api/events` endpoint returns data
-- Clear browser cache
+2. **Webhook Not Triggering**:
+   - Verify the webhook is properly configured in your GitHub repository settings
+   - Check the webhook URL is correct
+   - Ensure the webhook secret matches your configuration
 
-## Author
+3. **Viewing Logs**:
+   ```bash
+   # If using Render
+   render logs
+   
+   # If using Heroku
+   heroku logs --tail
+   ```
 
-Created for TechStax Developer Assessment
+## Cleaning Up
 
-## License
+After testing, clean up the test branches:
 
-MIT License
+```bash
+# Delete local branches
+git checkout main
+git branch -D test-pr test-merge 2>/dev/null || true
+
+# Delete remote branches
+git push origin --delete test-pr test-merge 2>/dev/null || true
+
+# Remove test files
+rm -f push_test.txt pr_test.txt merge_test.txt 2>/dev/null || true
+```
+
+## Viewing Events
+
+All events are stored in MongoDB and can be viewed in the web interface at:
+`https://techstax-assignment-webhook.onrender.com`
+
+The interface automatically refreshes every 15 seconds to show new events.
+
+---
+
+For any additional help, please refer to the project documentation or open an issue in the repository.
+### Next Steps:
+ 
+1. Commit and push the new documentation:
+   ```bash
+   git add README.md
+   git commit -m "Add comprehensive testing guide"
+   git push origin main
