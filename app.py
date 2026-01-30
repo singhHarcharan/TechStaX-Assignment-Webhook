@@ -231,13 +231,24 @@ def get_events():
         # Transform the events to match the frontend's expected format
         transformed_events = []
         for event in events:
+            # Handle both datetime object and dictionary formats
+            timestamp = event.get('timestamp')
+            if hasattr(timestamp, 'isoformat'):
+                # If it's a datetime object
+                timestamp_str = timestamp.isoformat()
+            elif isinstance(timestamp, dict):
+                # If it's a dictionary (for backward compatibility)
+                timestamp_str = timestamp.get('$date', '')
+            else:
+                timestamp_str = ''
+
             transformed = {
-                'request_id': event['data'].get('request_id', ''),
-                'action': event['data'].get('action', ''),
-                'author': event['data'].get('author', ''),
-                'from_branch': event['data'].get('from_branch', ''),
-                'to_branch': event['data'].get('to_branch', ''),
-                'timestamp': event.get('timestamp', {}).get('$date', ''),
+                'request_id': event.get('data', {}).get('request_id', ''),
+                'action': event.get('data', {}).get('action', ''),
+                'author': event.get('data', {}).get('author', ''),
+                'from_branch': event.get('data', {}).get('from_branch', ''),
+                'to_branch': event.get('data', {}).get('to_branch', ''),
+                'timestamp': timestamp_str,
                 'type': event.get('type', ''),
                 'repository': event.get('repository', ''),
                 'sender': event.get('sender', '')
