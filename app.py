@@ -225,14 +225,30 @@ def get_events():
         # Fetch events, excluding MongoDB's _id field
         events = list(events_collection.find(
             {},
-            {'_id': 0}
+            {'_id': 0, 'data._id': 0}  # Exclude _id fields
         ).sort('timestamp', -1))
         
-        return jsonify(events), 200
+        # Transform the events to match the frontend's expected format
+        transformed_events = []
+        for event in events:
+            transformed = {
+                'request_id': event['data'].get('request_id', ''),
+                'action': event['data'].get('action', ''),
+                'author': event['data'].get('author', ''),
+                'from_branch': event['data'].get('from_branch', ''),
+                'to_branch': event['data'].get('to_branch', ''),
+                'timestamp': event.get('timestamp', {}).get('$date', ''),
+                'type': event.get('type', ''),
+                'repository': event.get('repository', ''),
+                'sender': event.get('sender', '')
+            }
+            transformed_events.append(transformed)
+        
+        return jsonify(transformed_events)
+        
     except Exception as e:
         logger.error(f"Error fetching events: {e}", exc_info=True)
         return jsonify({'error': 'Failed to fetch events'}), 500
-
 
 @app.route('/api/events/clear', methods=['POST'])
 def clear_events():
