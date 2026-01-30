@@ -223,7 +223,7 @@ def get_events():
     """
     try:
         # Fetch events, excluding MongoDB's _id field
-        events = list(collection.find(
+        events = list(events_collection.find(
             {},
             {'_id': 0}
         ).sort('timestamp', -1))
@@ -240,7 +240,7 @@ def clear_events():
     API endpoint to clear all events (useful for testing)
     """
     try:
-        result = collection.delete_many({})
+        result = events_collection.delete_many({})
         logger.info(f"Cleared {result.deleted_count} events")
         return jsonify({
             'status': 'success',
