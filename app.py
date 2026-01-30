@@ -9,6 +9,7 @@ from flask_cors import CORS
 from pymongo import MongoClient
 from datetime import datetime
 import os
+import json
 import hashlib
 import hmac
 import logging
@@ -144,21 +145,46 @@ def webhook():
     request_data = request.get_data()
     
     # Get the signature from headers
+    # Get the raw request data first
+    request_data = request.get_data()
+    
+    # Get the signature from headers
     signature = request.headers.get('X-Hub-Signature-256') or \
                request.headers.get('X-Hub-Signature')
     
     # Log the headers and signature for debugging
     logger.debug("Received headers: %s", dict(request.headers))
     logger.debug("Signature received: %s", signature)
+    logger.debug("Received headers: %s", dict(request.headers))
+    logger.debug("Signature received: %s", signature)
     
     try:
+        # Verify GitHub signature with raw request data
+        if not verify_signature(request_data, signature):
         # Verify GitHub signature with raw request data
         if not verify_signature(request_data, signature):
             logger.warning("Invalid webhook signature")
             return jsonify({'error': 'Invalid signature'}), 401
         
-        # Parse JSON only after verification
-        payload = request.json
+        # Parse request data based on content type
+        content_type = request.headers.get('Content-Type', '')
+        if 'application/json' in content_type:
+            payload = request.get_json()
+        elif 'application/x-www-form-urlencoded' in content_type:
+            # For form-encoded data, the payload is in the 'payload' field
+            form_data = request.form
+            if 'payload' not in form_data:
+                logger.warning("No payload in form data")
+                return jsonify({'error': 'No payload in form data'}), 400
+            try:
+                payload = json.loads(form_data['payload'])
+            except json.JSONDecodeError:
+                logger.error("Invalid JSON in form payload")
+                return jsonify({'error': 'Invalid JSON in payload'}), 400
+        else:
+            logger.warning(f"Unsupported content type: {content_type}")
+            return jsonify({'error': 'Unsupported content type'}), 415
+
         if not payload:
             logger.warning("No payload received")
             return jsonify({'error': 'No payload'}), 400
@@ -166,7 +192,12 @@ def webhook():
         # Get event type
         event_type = request.headers.get('X-GitHub-Event')
         logger.info(f"Received {event_type} event")
+            
+        # Get event type
+        event_type = request.headers.get('X-GitHub-Event')
+        logger.info(f"Received {event_type} event")
         
+        # Process different event types
         # Process different event types
         if event_type == 'push':
             event_data = parse_push_event(payload)
@@ -174,7 +205,15 @@ def webhook():
             if payload.get('action') == 'closed' and payload.get('pull_request', {}).get('merged'):
                 event_data = parse_merge_event(payload)
             else:
+            if payload.get('action') == 'closed' and payload.get('pull_request', {}).get('merged'):
+                event_data = parse_merge_event(payload)
+            else:
                 event_data = parse_pull_request_event(payload)
+        else:
+            logger.warning(f"Unhandled event type: {event_type}")
+            return jsonify({'status': 'ignored', 'message': 'Event type not processed'}), 200
+
+        # Store the event in MongoDB
         else:
             logger.warning(f"Unhandled event type: {event_type}")
             return jsonify({'status': 'ignored', 'message': 'Event type not processed'}), 200
@@ -193,7 +232,20 @@ def webhook():
         
         return jsonify({'status': 'success'}), 200
 
+            event = {
+                'type': event_type,
+                'data': event_data,
+                'timestamp': datetime.utcnow(),
+                'repository': payload.get('repository', {}).get('full_name', 'unknown'),
+                'sender': payload.get('sender', {}).get('login', 'unknown')
+            }
+            events_collection.insert_one(event)
+            logger.info(f"Stored {event_type} event in database")
+        
+        return jsonify({'status': 'success'}), 200
+
     except Exception as e:
+        logger.error(f"Error processing webhook: {str(e)}", exc_info=True)
         logger.error(f"Error processing webhook: {str(e)}", exc_info=True)
         return jsonify({'error': 'Internal server error'}), 500
 
