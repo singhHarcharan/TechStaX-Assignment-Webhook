@@ -45,7 +45,7 @@ try:
         w='majority'
     )
     db = client[DATABASE_NAME]
-    collection = db[COLLECTION_NAME]
+    events_collection = db[COLLECTION_NAME]
     logger.info("Successfully connected to MongoDB")
 except Exception as e:
     logger.error(f"Failed to connect to MongoDB: {e}")
