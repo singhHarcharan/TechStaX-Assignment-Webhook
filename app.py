@@ -140,68 +140,62 @@ def webhook():
     GitHub webhook endpoint
     Receives and processes GitHub events
     """
-    # Get the signature from headers first
+    # Get the raw request data first
+    request_data = request.get_data()
+    
+    # Get the signature from headers
     signature = request.headers.get('X-Hub-Signature-256') or \
                request.headers.get('X-Hub-Signature')
     
     # Log the headers and signature for debugging
-    print("Received headers:", dict(request.headers))
-    print("Signature received:", signature)
+    logger.debug("Received headers: %s", dict(request.headers))
+    logger.debug("Signature received: %s", signature)
     
     try:
-        # Verify GitHub signature
-        if not verify_signature(request.data, signature):
+        # Verify GitHub signature with raw request data
+        if not verify_signature(request_data, signature):
             logger.warning("Invalid webhook signature")
             return jsonify({'error': 'Invalid signature'}), 401
         
-        # Get event type
-        event_type = request.headers.get('X-GitHub-Event')
+        # Parse JSON only after verification
         payload = request.json
-        
         if not payload:
             logger.warning("No payload received")
             return jsonify({'error': 'No payload'}), 400
+            
+        # Get event type
+        event_type = request.headers.get('X-GitHub-Event')
+        logger.info(f"Received {event_type} event")
         
-        event_data = None
-        
-        # Parse based on event type
+        # Process different event types
         if event_type == 'push':
             event_data = parse_push_event(payload)
-            logger.info(f"Received PUSH event: {event_data['request_id']}")
-            
         elif event_type == 'pull_request':
-            action = payload.get('action')
-            
-            if action == 'opened' or action == 'reopened':
-                event_data = parse_pull_request_event(payload)
-                logger.info(f"Received PULL_REQUEST event: {event_data['request_id']}")
-                
-            elif action == 'closed' and payload.get('pull_request', {}).get('merged'):
-                # This is a merge event (brownie points!)
+            if payload.get('action') == 'closed' and payload.get('pull_request', {}).get('merged'):
                 event_data = parse_merge_event(payload)
-                logger.info(f"Received MERGE event: {event_data['request_id']}")
-        
-        if event_data:
-            # Insert into MongoDB
-            result = collection.insert_one(event_data)
-            logger.info(f"Stored event in MongoDB with ID: {result.inserted_id}")
-            
-            return jsonify({
-                'status': 'success',
-                'message': 'Event processed successfully',
-                'id': str(result.inserted_id)
-            }), 200
+            else:
+                event_data = parse_pull_request_event(payload)
         else:
-            logger.info(f"Ignoring event type: {event_type}")
-            return jsonify({
-                'status': 'ignored',
-                'message': 'Event type not processed'
-            }), 200
-            
-    except Exception as e:
-        logger.error(f"Error processing webhook: {e}", exc_info=True)
-        return jsonify({'error': 'Internal server error'}), 500
+            logger.warning(f"Unhandled event type: {event_type}")
+            return jsonify({'status': 'ignored', 'message': 'Event type not processed'}), 200
 
+        # Store the event in MongoDB
+        if event_data:
+            event = {
+                'type': event_type,
+                'data': event_data,
+                'timestamp': datetime.utcnow(),
+                'repository': payload.get('repository', {}).get('full_name', 'unknown'),
+                'sender': payload.get('sender', {}).get('login', 'unknown')
+            }
+            events_collection.insert_one(event)
+            logger.info(f"Stored {event_type} event in database")
+        
+        return jsonify({'status': 'success'}), 200
+
+    except Exception as e:
+        logger.error(f"Error processing webhook: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/events', methods=['GET'])
 def get_events():
